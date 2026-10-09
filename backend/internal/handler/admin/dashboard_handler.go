@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -64,6 +62,18 @@ func parseTimeRange(c *gin.Context) (time.Time, time.Time) {
 	}
 
 	return startTime, endTime
+}
+
+func parseOptionalBoolDashboardFilter(c *gin.Context, name string) (*bool, error) {
+	raw := strings.TrimSpace(c.Query(name))
+	if raw == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
 }
 
 // GetStats handles getting dashboard statistics
@@ -202,6 +212,7 @@ func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
 	var requestType *int16
 	var stream *bool
 	var billingType *int8
+	var upstreamModelMismatch *bool
 
 	if userIDStr := c.Query("user_id"); userIDStr != "" {
 		if id, err := strconv.ParseInt(userIDStr, 10, 64); err == nil {
@@ -251,8 +262,18 @@ func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
 			return
 		}
 	}
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
+	}
+	upstreamModelMismatch, err = parseOptionalBoolDashboardFilter(c, "upstream_model_mismatch")
+	if err != nil {
+		response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
+		return
+	}
 
-	trend, hit, err := h.getUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, billingType)
+	trend, hit, err := h.getUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, nativeCompactionV2, billingType, upstreamModelMismatch)
 	if err != nil {
 		response.Error(c, 500, "Failed to get usage trend")
 		return
@@ -279,6 +300,7 @@ func (h *DashboardHandler) GetModelStats(c *gin.Context) {
 	var requestType *int16
 	var stream *bool
 	var billingType *int8
+	var upstreamModelMismatch *bool
 
 	if userIDStr := c.Query("user_id"); userIDStr != "" {
 		if id, err := strconv.ParseInt(userIDStr, 10, 64); err == nil {
@@ -332,8 +354,18 @@ func (h *DashboardHandler) GetModelStats(c *gin.Context) {
 			return
 		}
 	}
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
+	}
+	upstreamModelMismatch, err = parseOptionalBoolDashboardFilter(c, "upstream_model_mismatch")
+	if err != nil {
+		response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
+		return
+	}
 
-	stats, hit, err := h.getModelStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, modelSource, requestType, stream, billingType)
+	stats, hit, err := h.getModelStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, modelSource, requestType, stream, nativeCompactionV2, billingType, upstreamModelMismatch)
 	if err != nil {
 		response.Error(c, 500, "Failed to get model statistics")
 		return
@@ -357,6 +389,7 @@ func (h *DashboardHandler) GetGroupStats(c *gin.Context) {
 	var requestType *int16
 	var stream *bool
 	var billingType *int8
+	var upstreamModelMismatch *bool
 
 	if userIDStr := c.Query("user_id"); userIDStr != "" {
 		if id, err := strconv.ParseInt(userIDStr, 10, 64); err == nil {
@@ -403,8 +436,18 @@ func (h *DashboardHandler) GetGroupStats(c *gin.Context) {
 			return
 		}
 	}
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
+	}
+	upstreamModelMismatch, err = parseOptionalBoolDashboardFilter(c, "upstream_model_mismatch")
+	if err != nil {
+		response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
+		return
+	}
 
-	stats, hit, err := h.getGroupStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, requestType, stream, billingType)
+	stats, hit, err := h.getGroupStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, requestType, stream, nativeCompactionV2, billingType, upstreamModelMismatch)
 	if err != nil {
 		response.Error(c, 500, "Failed to get group statistics")
 		return
@@ -457,7 +500,11 @@ func (h *DashboardHandler) GetUserUsageTrend(c *gin.Context) {
 		limit = 12
 	}
 
-	trend, hit, err := h.getUserUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, limit)
+	metric := c.DefaultQuery("metric", "tokens")
+	if metric != "tokens" && metric != "actual_cost" {
+		metric = "tokens"
+	}
+	trend, hit, err := h.getUserUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, limit, metric)
 	if err != nil {
 		response.Error(c, 500, "Failed to get user usage trend")
 		return
@@ -498,21 +545,14 @@ func (h *DashboardHandler) GetUserSpendingRanking(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)
 	limit := parseRankingLimit(c.DefaultQuery("limit", "12"))
 
-	var userID int64
-	if subject, ok := servermiddleware.GetAuthSubjectFromContext(c); ok {
-		userID = subject.UserID
-	}
-
 	keyRaw, _ := json.Marshal(struct {
-		Start  string `json:"start"`
-		End    string `json:"end"`
-		Limit  int    `json:"limit"`
-		UserID int64  `json:"user_id,omitempty"`
+		Start string `json:"start"`
+		End   string `json:"end"`
+		Limit int    `json:"limit"`
 	}{
-		Start:  startTime.UTC().Format(time.RFC3339),
-		End:    endTime.UTC().Format(time.RFC3339),
-		Limit:  limit,
-		UserID: userID,
+		Start: startTime.UTC().Format(time.RFC3339),
+		End:   endTime.UTC().Format(time.RFC3339),
+		Limit: limit,
 	})
 	cacheKey := string(keyRaw)
 	if cached, ok := dashboardUsersRankingCache.Get(cacheKey); ok {
@@ -521,12 +561,7 @@ func (h *DashboardHandler) GetUserSpendingRanking(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	if userID > 0 {
-		ctx = context.WithValue(ctx, usagestats.ContextKeyRankingUserID, userID)
-	}
-
-	ranking, err := h.dashboardService.GetUserSpendingRanking(ctx, startTime, endTime, limit)
+	ranking, err := h.dashboardService.GetUserSpendingRanking(c.Request.Context(), startTime, endTime, limit)
 	if err != nil {
 		response.Error(c, 500, "Failed to get user spending ranking")
 		return
@@ -539,9 +574,6 @@ func (h *DashboardHandler) GetUserSpendingRanking(c *gin.Context) {
 		"total_tokens":      ranking.TotalTokens,
 		"start_date":        startTime.Format("2006-01-02"),
 		"end_date":          endTime.Add(-24 * time.Hour).Format("2006-01-02"),
-	}
-	if ranking.UserRanking != nil {
-		payload["user_ranking"] = ranking.UserRanking
 	}
 	dashboardUsersRankingCache.Set(cacheKey, payload)
 	c.Header("X-Snapshot-Cache", "miss")
@@ -674,16 +706,27 @@ func (h *DashboardHandler) GetUserBreakdown(c *gin.Context) {
 			dim.AccountID = id
 		}
 	}
-	if v := c.Query("request_type"); v != "" {
-		if rt, err := strconv.ParseInt(v, 10, 16); err == nil {
-			rtVal := int16(rt)
-			dim.RequestType = &rtVal
+	if v := strings.TrimSpace(c.Query("request_type")); v != "" {
+		parsed, err := service.ParseUsageRequestType(v)
+		if err != nil {
+			response.BadRequest(c, err.Error())
+			return
 		}
+		rtVal := int16(parsed)
+		dim.RequestType = &rtVal
 	}
 	if v := c.Query("stream"); v != "" {
 		if s, err := strconv.ParseBool(v); err == nil {
 			dim.Stream = &s
 		}
+	}
+	if v := strings.TrimSpace(c.Query("native_compaction_v2")); v != "" {
+		value, err := strconv.ParseBool(v)
+		if err != nil {
+			response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+			return
+		}
+		dim.NativeCompactionV2 = &value
 	}
 	if v := c.Query("billing_type"); v != "" {
 		if bt, err := strconv.ParseInt(v, 10, 8); err == nil {
@@ -691,6 +734,9 @@ func (h *DashboardHandler) GetUserBreakdown(c *gin.Context) {
 			dim.BillingType = &btVal
 		}
 	}
+
+	// sort_by 由 repo 层 allowlist 校验;非法值静默回退默认排序(actual_cost)。
+	dim.SortBy = strings.TrimSpace(c.Query("sort_by"))
 
 	limit := 50
 	if v := c.Query("limit"); v != "" {

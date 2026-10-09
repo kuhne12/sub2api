@@ -29,6 +29,8 @@ const (
 	FieldRole = "role"
 	// FieldBalance holds the string denoting the balance field in the database.
 	FieldBalance = "balance"
+	// FieldFrozenBalance holds the string denoting the frozen_balance field in the database.
+	FieldFrozenBalance = "frozen_balance"
 	// FieldConcurrency holds the string denoting the concurrency field in the database.
 	FieldConcurrency = "concurrency"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -49,6 +51,8 @@ const (
 	FieldLastLoginAt = "last_login_at"
 	// FieldLastActiveAt holds the string denoting the last_active_at field in the database.
 	FieldLastActiveAt = "last_active_at"
+	// FieldRestrictPublicGroups holds the string denoting the restrict_public_groups field in the database.
+	FieldRestrictPublicGroups = "restrict_public_groups"
 	// FieldBalanceNotifyEnabled holds the string denoting the balance_notify_enabled field in the database.
 	FieldBalanceNotifyEnabled = "balance_notify_enabled"
 	// FieldBalanceNotifyThresholdType holds the string denoting the balance_notify_threshold_type field in the database.
@@ -87,8 +91,6 @@ const (
 	EdgePendingAuthSessions = "pending_auth_sessions"
 	// EdgePlatformQuotas holds the string denoting the platform_quotas edge name in mutations.
 	EdgePlatformQuotas = "platform_quotas"
-	// EdgeWelfareRecords holds the string denoting the welfare_records edge name in mutations.
-	EdgeWelfareRecords = "welfare_records"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
 	// Table holds the table name of the user in the database.
@@ -182,13 +184,6 @@ const (
 	PlatformQuotasInverseTable = "user_platform_quotas"
 	// PlatformQuotasColumn is the table column denoting the platform_quotas relation/edge.
 	PlatformQuotasColumn = "user_id"
-	// WelfareRecordsTable is the table that holds the welfare_records relation/edge.
-	WelfareRecordsTable = "welfare_records"
-	// WelfareRecordsInverseTable is the table name for the WelfareRecord entity.
-	// It exists in this package in order to avoid circular dependency with the "welfarerecord" package.
-	WelfareRecordsInverseTable = "welfare_records"
-	// WelfareRecordsColumn is the table column denoting the welfare_records relation/edge.
-	WelfareRecordsColumn = "user_id"
 	// UserAllowedGroupsTable is the table that holds the user_allowed_groups relation/edge.
 	UserAllowedGroupsTable = "user_allowed_groups"
 	// UserAllowedGroupsInverseTable is the table name for the UserAllowedGroup entity.
@@ -208,6 +203,7 @@ var Columns = []string{
 	FieldPasswordHash,
 	FieldRole,
 	FieldBalance,
+	FieldFrozenBalance,
 	FieldConcurrency,
 	FieldStatus,
 	FieldUsername,
@@ -218,6 +214,7 @@ var Columns = []string{
 	FieldSignupSource,
 	FieldLastLoginAt,
 	FieldLastActiveAt,
+	FieldRestrictPublicGroups,
 	FieldBalanceNotifyEnabled,
 	FieldBalanceNotifyThresholdType,
 	FieldBalanceNotifyThreshold,
@@ -266,6 +263,8 @@ var (
 	RoleValidator func(string) error
 	// DefaultBalance holds the default value on creation for the "balance" field.
 	DefaultBalance float64
+	// DefaultFrozenBalance holds the default value on creation for the "frozen_balance" field.
+	DefaultFrozenBalance float64
 	// DefaultConcurrency holds the default value on creation for the "concurrency" field.
 	DefaultConcurrency int
 	// DefaultStatus holds the default value on creation for the "status" field.
@@ -284,6 +283,8 @@ var (
 	DefaultSignupSource string
 	// SignupSourceValidator is a validator for the "signup_source" field. It is called by the builders before save.
 	SignupSourceValidator func(string) error
+	// DefaultRestrictPublicGroups holds the default value on creation for the "restrict_public_groups" field.
+	DefaultRestrictPublicGroups bool
 	// DefaultBalanceNotifyEnabled holds the default value on creation for the "balance_notify_enabled" field.
 	DefaultBalanceNotifyEnabled bool
 	// DefaultBalanceNotifyThresholdType holds the default value on creation for the "balance_notify_threshold_type" field.
@@ -339,6 +340,11 @@ func ByBalance(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBalance, opts...).ToFunc()
 }
 
+// ByFrozenBalance orders the results by the frozen_balance field.
+func ByFrozenBalance(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFrozenBalance, opts...).ToFunc()
+}
+
 // ByConcurrency orders the results by the concurrency field.
 func ByConcurrency(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConcurrency, opts...).ToFunc()
@@ -387,6 +393,11 @@ func ByLastLoginAt(opts ...sql.OrderTermOption) OrderOption {
 // ByLastActiveAt orders the results by the last_active_at field.
 func ByLastActiveAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastActiveAt, opts...).ToFunc()
+}
+
+// ByRestrictPublicGroups orders the results by the restrict_public_groups field.
+func ByRestrictPublicGroups(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRestrictPublicGroups, opts...).ToFunc()
 }
 
 // ByBalanceNotifyEnabled orders the results by the balance_notify_enabled field.
@@ -601,20 +612,6 @@ func ByPlatformQuotas(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByWelfareRecordsCount orders the results by welfare_records count.
-func ByWelfareRecordsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newWelfareRecordsStep(), opts...)
-	}
-}
-
-// ByWelfareRecords orders the results by welfare_records terms.
-func ByWelfareRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newWelfareRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByUserAllowedGroupsCount orders the results by user_allowed_groups count.
 func ByUserAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -717,13 +714,6 @@ func newPlatformQuotasStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PlatformQuotasInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PlatformQuotasTable, PlatformQuotasColumn),
-	)
-}
-func newWelfareRecordsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(WelfareRecordsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, WelfareRecordsTable, WelfareRecordsColumn),
 	)
 }
 func newUserAllowedGroupsStep() *sqlgraph.Step {

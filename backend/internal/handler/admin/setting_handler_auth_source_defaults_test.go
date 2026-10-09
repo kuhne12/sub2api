@@ -217,12 +217,14 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
 
 	body := map[string]any{
-		"promo_code_enabled":                    true,
-		"payment_visible_method_alipay_source":  "easypay",
-		"payment_visible_method_wxpay_source":   "wxpay",
-		"payment_visible_method_alipay_enabled": true,
-		"payment_visible_method_wxpay_enabled":  false,
-		"openai_advanced_scheduler_enabled":     true,
+		"promo_code_enabled":                                      true,
+		"payment_visible_method_alipay_source":                    "easypay",
+		"payment_visible_method_wxpay_source":                     "wxpay",
+		"payment_visible_method_alipay_enabled":                   true,
+		"payment_visible_method_wxpay_enabled":                    false,
+		"openai_advanced_scheduler_enabled":                       true,
+		"openai_oauth_scheduling_rate_multiplier":                 0.05,
+		"openai_advanced_scheduler_subscription_priority_enabled": true,
 	}
 	rawBody, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -240,6 +242,8 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 	require.Equal(t, "true", repo.values[service.SettingPaymentVisibleMethodAlipayEnabled])
 	require.Equal(t, "false", repo.values[service.SettingPaymentVisibleMethodWxpayEnabled])
 	require.Equal(t, "true", repo.values["openai_advanced_scheduler_enabled"])
+	require.Equal(t, "0.05", repo.values[service.SettingKeyOpenAIOAuthSchedulingRateMultiplier])
+	require.Equal(t, "true", repo.values[service.SettingKeyOpenAIAdvancedSchedulerSubscriptionPriorityEnabled])
 
 	var resp response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
@@ -250,38 +254,8 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 	require.Equal(t, true, data["payment_visible_method_alipay_enabled"])
 	require.Equal(t, false, data["payment_visible_method_wxpay_enabled"])
 	require.Equal(t, true, data["openai_advanced_scheduler_enabled"])
-}
-
-func TestSettingHandler_UpdateSettings_EchoesWelfareSettings(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	repo := &settingHandlerRepoStub{values: map[string]string{}}
-	svc := service.NewSettingService(repo, &config.Config{})
-	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
-
-	body := map[string]any{
-		"welfare_leaderboard_rank_limit":    3,
-		"welfare_leaderboard_reward_ratios": `[1,0.5,0.2]`,
-	}
-	rawBody, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(rawBody))
-	c.Request.Header.Set("Content-Type", "application/json")
-
-	handler.UpdateSettings(c)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "3", repo.values[service.SettingKeyWelfareLeaderboardRankLimit])
-	require.Equal(t, `[1,0.5,0.2]`, repo.values[service.SettingKeyWelfareLeaderboardRewardRatios])
-
-	var resp response.Response
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	data, ok := resp.Data.(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, float64(3), data["welfare_leaderboard_rank_limit"])
-	require.Equal(t, `[1,0.5,0.2]`, data["welfare_leaderboard_reward_ratios"])
+	require.Equal(t, 0.05, data["openai_oauth_scheduling_rate_multiplier"])
+	require.Equal(t, true, data["openai_advanced_scheduler_subscription_priority_enabled"])
 }
 
 func TestSettingHandler_UpdateSettings_PreservesLegacyBlankPaymentVisibleMethodSource(t *testing.T) {

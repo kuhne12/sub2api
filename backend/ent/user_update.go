@@ -25,7 +25,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
-	"github.com/Wei-Shaw/sub2api/ent/welfarerecord"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -127,6 +126,27 @@ func (_u *UserUpdate) SetNillableBalance(v *float64) *UserUpdate {
 // AddBalance adds value to the "balance" field.
 func (_u *UserUpdate) AddBalance(v float64) *UserUpdate {
 	_u.mutation.AddBalance(v)
+	return _u
+}
+
+// SetFrozenBalance sets the "frozen_balance" field.
+func (_u *UserUpdate) SetFrozenBalance(v float64) *UserUpdate {
+	_u.mutation.ResetFrozenBalance()
+	_u.mutation.SetFrozenBalance(v)
+	return _u
+}
+
+// SetNillableFrozenBalance sets the "frozen_balance" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableFrozenBalance(v *float64) *UserUpdate {
+	if v != nil {
+		_u.SetFrozenBalance(*v)
+	}
+	return _u
+}
+
+// AddFrozenBalance adds value to the "frozen_balance" field.
+func (_u *UserUpdate) AddFrozenBalance(v float64) *UserUpdate {
+	_u.mutation.AddFrozenBalance(v)
 	return _u
 }
 
@@ -298,6 +318,20 @@ func (_u *UserUpdate) SetNillableLastActiveAt(v *time.Time) *UserUpdate {
 // ClearLastActiveAt clears the value of the "last_active_at" field.
 func (_u *UserUpdate) ClearLastActiveAt() *UserUpdate {
 	_u.mutation.ClearLastActiveAt()
+	return _u
+}
+
+// SetRestrictPublicGroups sets the "restrict_public_groups" field.
+func (_u *UserUpdate) SetRestrictPublicGroups(v bool) *UserUpdate {
+	_u.mutation.SetRestrictPublicGroups(v)
+	return _u
+}
+
+// SetNillableRestrictPublicGroups sets the "restrict_public_groups" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableRestrictPublicGroups(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetRestrictPublicGroups(*v)
+	}
 	return _u
 }
 
@@ -607,21 +641,6 @@ func (_u *UserUpdate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdate {
 	return _u.AddPlatformQuotaIDs(ids...)
 }
 
-// AddWelfareRecordIDs adds the "welfare_records" edge to the WelfareRecord entity by IDs.
-func (_u *UserUpdate) AddWelfareRecordIDs(ids ...int64) *UserUpdate {
-	_u.mutation.AddWelfareRecordIDs(ids...)
-	return _u
-}
-
-// AddWelfareRecords adds the "welfare_records" edges to the WelfareRecord entity.
-func (_u *UserUpdate) AddWelfareRecords(v ...*WelfareRecord) *UserUpdate {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddWelfareRecordIDs(ids...)
-}
-
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -900,27 +919,6 @@ func (_u *UserUpdate) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpdate 
 	return _u.RemovePlatformQuotaIDs(ids...)
 }
 
-// ClearWelfareRecords clears all "welfare_records" edges to the WelfareRecord entity.
-func (_u *UserUpdate) ClearWelfareRecords() *UserUpdate {
-	_u.mutation.ClearWelfareRecords()
-	return _u
-}
-
-// RemoveWelfareRecordIDs removes the "welfare_records" edge to WelfareRecord entities by IDs.
-func (_u *UserUpdate) RemoveWelfareRecordIDs(ids ...int64) *UserUpdate {
-	_u.mutation.RemoveWelfareRecordIDs(ids...)
-	return _u
-}
-
-// RemoveWelfareRecords removes "welfare_records" edges to WelfareRecord entities.
-func (_u *UserUpdate) RemoveWelfareRecords(v ...*WelfareRecord) *UserUpdate {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveWelfareRecordIDs(ids...)
-}
-
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *UserUpdate) Save(ctx context.Context) (int, error) {
 	if err := _u.defaults(); err != nil {
@@ -1034,6 +1032,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedBalance(); ok {
 		_spec.AddField(user.FieldBalance, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.FrozenBalance(); ok {
+		_spec.SetField(user.FieldFrozenBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedFrozenBalance(); ok {
+		_spec.AddField(user.FieldFrozenBalance, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.Concurrency(); ok {
 		_spec.SetField(user.FieldConcurrency, field.TypeInt, value)
 	}
@@ -1078,6 +1082,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.LastActiveAtCleared() {
 		_spec.ClearField(user.FieldLastActiveAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RestrictPublicGroups(); ok {
+		_spec.SetField(user.FieldRestrictPublicGroups, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.BalanceNotifyEnabled(); ok {
 		_spec.SetField(user.FieldBalanceNotifyEnabled, field.TypeBool, value)
@@ -1706,51 +1713,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.WelfareRecordsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.WelfareRecordsTable,
-			Columns: []string{user.WelfareRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(welfarerecord.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedWelfareRecordsIDs(); len(nodes) > 0 && !_u.mutation.WelfareRecordsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.WelfareRecordsTable,
-			Columns: []string{user.WelfareRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(welfarerecord.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.WelfareRecordsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.WelfareRecordsTable,
-			Columns: []string{user.WelfareRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(welfarerecord.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -1857,6 +1819,27 @@ func (_u *UserUpdateOne) SetNillableBalance(v *float64) *UserUpdateOne {
 // AddBalance adds value to the "balance" field.
 func (_u *UserUpdateOne) AddBalance(v float64) *UserUpdateOne {
 	_u.mutation.AddBalance(v)
+	return _u
+}
+
+// SetFrozenBalance sets the "frozen_balance" field.
+func (_u *UserUpdateOne) SetFrozenBalance(v float64) *UserUpdateOne {
+	_u.mutation.ResetFrozenBalance()
+	_u.mutation.SetFrozenBalance(v)
+	return _u
+}
+
+// SetNillableFrozenBalance sets the "frozen_balance" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableFrozenBalance(v *float64) *UserUpdateOne {
+	if v != nil {
+		_u.SetFrozenBalance(*v)
+	}
+	return _u
+}
+
+// AddFrozenBalance adds value to the "frozen_balance" field.
+func (_u *UserUpdateOne) AddFrozenBalance(v float64) *UserUpdateOne {
+	_u.mutation.AddFrozenBalance(v)
 	return _u
 }
 
@@ -2028,6 +2011,20 @@ func (_u *UserUpdateOne) SetNillableLastActiveAt(v *time.Time) *UserUpdateOne {
 // ClearLastActiveAt clears the value of the "last_active_at" field.
 func (_u *UserUpdateOne) ClearLastActiveAt() *UserUpdateOne {
 	_u.mutation.ClearLastActiveAt()
+	return _u
+}
+
+// SetRestrictPublicGroups sets the "restrict_public_groups" field.
+func (_u *UserUpdateOne) SetRestrictPublicGroups(v bool) *UserUpdateOne {
+	_u.mutation.SetRestrictPublicGroups(v)
+	return _u
+}
+
+// SetNillableRestrictPublicGroups sets the "restrict_public_groups" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableRestrictPublicGroups(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetRestrictPublicGroups(*v)
+	}
 	return _u
 }
 
@@ -2337,21 +2334,6 @@ func (_u *UserUpdateOne) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdateO
 	return _u.AddPlatformQuotaIDs(ids...)
 }
 
-// AddWelfareRecordIDs adds the "welfare_records" edge to the WelfareRecord entity by IDs.
-func (_u *UserUpdateOne) AddWelfareRecordIDs(ids ...int64) *UserUpdateOne {
-	_u.mutation.AddWelfareRecordIDs(ids...)
-	return _u
-}
-
-// AddWelfareRecords adds the "welfare_records" edges to the WelfareRecord entity.
-func (_u *UserUpdateOne) AddWelfareRecords(v ...*WelfareRecord) *UserUpdateOne {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddWelfareRecordIDs(ids...)
-}
-
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -2630,27 +2612,6 @@ func (_u *UserUpdateOne) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpda
 	return _u.RemovePlatformQuotaIDs(ids...)
 }
 
-// ClearWelfareRecords clears all "welfare_records" edges to the WelfareRecord entity.
-func (_u *UserUpdateOne) ClearWelfareRecords() *UserUpdateOne {
-	_u.mutation.ClearWelfareRecords()
-	return _u
-}
-
-// RemoveWelfareRecordIDs removes the "welfare_records" edge to WelfareRecord entities by IDs.
-func (_u *UserUpdateOne) RemoveWelfareRecordIDs(ids ...int64) *UserUpdateOne {
-	_u.mutation.RemoveWelfareRecordIDs(ids...)
-	return _u
-}
-
-// RemoveWelfareRecords removes "welfare_records" edges to WelfareRecord entities.
-func (_u *UserUpdateOne) RemoveWelfareRecords(v ...*WelfareRecord) *UserUpdateOne {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveWelfareRecordIDs(ids...)
-}
-
 // Where appends a list predicates to the UserUpdate builder.
 func (_u *UserUpdateOne) Where(ps ...predicate.User) *UserUpdateOne {
 	_u.mutation.Where(ps...)
@@ -2794,6 +2755,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.AddedBalance(); ok {
 		_spec.AddField(user.FieldBalance, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.FrozenBalance(); ok {
+		_spec.SetField(user.FieldFrozenBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedFrozenBalance(); ok {
+		_spec.AddField(user.FieldFrozenBalance, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.Concurrency(); ok {
 		_spec.SetField(user.FieldConcurrency, field.TypeInt, value)
 	}
@@ -2838,6 +2805,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.LastActiveAtCleared() {
 		_spec.ClearField(user.FieldLastActiveAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RestrictPublicGroups(); ok {
+		_spec.SetField(user.FieldRestrictPublicGroups, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.BalanceNotifyEnabled(); ok {
 		_spec.SetField(user.FieldBalanceNotifyEnabled, field.TypeBool, value)
@@ -3459,51 +3429,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.WelfareRecordsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.WelfareRecordsTable,
-			Columns: []string{user.WelfareRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(welfarerecord.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedWelfareRecordsIDs(); len(nodes) > 0 && !_u.mutation.WelfareRecordsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.WelfareRecordsTable,
-			Columns: []string{user.WelfareRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(welfarerecord.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.WelfareRecordsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.WelfareRecordsTable,
-			Columns: []string{user.WelfareRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(welfarerecord.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
